@@ -1093,6 +1093,65 @@ final class AppState {
     @ObservationIgnored
     var adoptedQuickTerminal: QuickTerminalSplitState?
 
+    /// Terminals on the desktop, in creation order. See
+    /// `AppState+DesktopWidgets.swift`.
+    var desktopWidgets: [DesktopWidget] = []
+
+    /// The one desktop widget unlocked for editing, if any. In memory only:
+    /// every widget launches locked.
+    var editingDesktopWidgetID: UUID?
+
+    /// The windows that draw `desktopWidgets`; nil under tests, which assert
+    /// on the model alone.
+    @ObservationIgnored
+    weak var desktopWidgetPresenter: (any DesktopWidgetPresenting)?
+
+    /// The screens widgets may sit on, the primary display (the one with
+    /// the menu bar, `NSScreen.screens[0]`) first — where new widgets go and
+    /// what `widgets.yaml` means by no `display:`. Injectable so placement
+    /// tests don't depend on the machine's displays.
+    @ObservationIgnored
+    var desktopScreens: () -> [DesktopScreen] = {
+        NSScreen.screens.map { DesktopScreen(name: $0.localizedName, visibleFrame: $0.visibleFrame) }
+    }
+
+    /// Where the system's own desktop widgets are, so ours line up with and
+    /// never cover them (`NativeDesktopWidgets`). Injectable: tests must not
+    /// see the machine's real widgets.
+    @ObservationIgnored
+    var nativeDesktopWidgetFrames: () -> [CGRect] = { NativeDesktopWidgets.frames() }
+
+    /// `~/.config/macterm/widgets.yaml` (`AppState+DesktopWidgets`).
+    @ObservationIgnored
+    let widgetLayoutStore: WidgetLayoutStore
+
+    /// The exact text of our last `widgets.yaml` write — anything else on
+    /// disk is an edit to absorb before the next write.
+    @ObservationIgnored
+    var widgetLayoutLastWrittenText: String?
+
+    /// Auto-writes paused because `widgets.yaml` doesn't parse.
+    @ObservationIgnored
+    var widgetLayoutSuspended = false
+
+    /// The widgets our last `widgets.yaml` write listed — the only ones an
+    /// entry can have been removed FROM. A widget created since that write
+    /// is unknown to the file on disk, not removed by the user.
+    @ObservationIgnored
+    var widgetLayoutLastWrittenIDs: Set<UUID> = []
+
+    /// Widgets whose `widgets.yaml` entry the user removed while Macterm ran:
+    /// still alive — a half-saved file must never kill a shell — but left out
+    /// of every write, so the next launch removes them as the file says.
+    @ObservationIgnored
+    var unlistedDesktopWidgetIDs: Set<UUID> = []
+
+    /// Restored widgets not drawn yet: they wait for zmx to say whether their
+    /// sessions survived, so a dead one respawns from its recipe instead of
+    /// a surface reattaching to an empty shell first.
+    @ObservationIgnored
+    var pendingDesktopWidgetMaterialize: Set<UUID> = []
+
     /// Refresh policy for `ZmxForegroundResolver`'s name→leader-pid cache:
     /// refresh on session lifecycle events plus a 30s reconcile TTL — never
     /// per tick (`zmx ls` is a fork/exec).
@@ -1131,7 +1190,11 @@ final class AppState {
     ) {
         self.workspaceStore = workspaceStore
         self.projectFiles = projectFiles
-        pinnedLayoutStore = PinnedLayoutStore(directoryURL: projectFiles.directoryURL)
+        pinnedLayoutStore = PinnedLayoutStore(
+            directoryURL: projectFiles.configDirectoryURL,
+            legacyDirectoryURL: projectFiles.directoryURL
+        )
+        widgetLayoutStore = WidgetLayoutStore(directoryURL: projectFiles.configDirectoryURL)
         if let quickTerminal { adoptQuickTerminal(quickTerminal) }
         let autoTileToken = NotificationCenter.default.addObserver(
             forName: .autoTilingEnabledDidChange,
@@ -1439,6 +1502,11 @@ final class AppState {
         // The quick terminal's tab reattaches like any workspace tab. Before
         // the orphan sweep below, which spares only what a pane claims.
         restoreQuickTerminal(loaded.quickTerminal)
+        // Widgets too: their sessions must be claimed before the sweep, and
+        // `widgets.yaml` decides which exist before either.
+        let restoredWidgets = restoreDesktopWidgets(loaded.desktopWidgets)
+        reconcileWidgetLayoutAtLaunch()
+        Task { await materializeRestoredDesktopWidgets(restoredWidgets) }
         if let id = Preferences.shared.activeProjectID {
             if id == PinnedTabs.projectID {
                 if !pinnedRecords.isEmpty {
@@ -1513,7 +1581,8 @@ final class AppState {
                         sidebarVisible: window.sidebarVisible
                     )
                 },
-            quickTerminal: quickTerminalSnapshot()
+            quickTerminal: quickTerminalSnapshot(),
+            desktopWidgets: desktopWidgetSnapshots()
         )
         // A closed or unloaded tab takes its bell out of the count with it.
         syncDockBadge()
@@ -1702,11 +1771,13 @@ final class AppState {
     /// too (#285), or a sweep would kill the very sessions the materialize
     /// step is about to reattach. So do the quick terminal's panes: restored
     /// at launch but attached only when the panel is first shown, they sit
-    /// at zero clients for exactly the window this sweep runs in.
+    /// at zero clients for exactly the window this sweep runs in. Desktop
+    /// widgets' sessions are claims for the same reason.
     private func claimedSessionNames() -> Set<String> {
         Set(allLivePanes().map(\.sessionName))
             .union(pendingPinnedSessionNames())
             .union(quickTerminalSessionNames())
+            .union(desktopWidgetSessionNames())
     }
 
     /// Every pane attached to a session, across ALL workspaces (pinned

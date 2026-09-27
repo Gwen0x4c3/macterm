@@ -52,6 +52,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
     // Window
     case toggleSidebar
     case newWindow
+    case newDesktopWidget
     case closeWindow
     case toggleCommandPalette
     case reloadGhosttyConfig
@@ -103,6 +104,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .previousProject: "Previous Project"
         case .toggleSidebar: "Toggle Sidebar"
         case .newWindow: "New Window"
+        case .newDesktopWidget: "New Desktop Widget"
         case .closeWindow: "Close Window"
         case .toggleCommandPalette: "Command Palette"
         case .reloadGhosttyConfig: "Reload Ghostty Config"
@@ -154,6 +156,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
              .previousProject: .projects
         case .toggleSidebar,
              .newWindow,
+             .newDesktopWidget,
              .closeWindow,
              .toggleCommandPalette: .window
         case .reloadGhosttyConfig,
@@ -208,6 +211,7 @@ enum AppCommand: String, CaseIterable, Identifiable {
         case .applyLayout: .applyLayout
         case .saveLayout: .saveLayout
         case .newRemoteProject,
+             .newDesktopWidget,
              .unloadProject,
              .removeProject,
              .replaceProjectPathWithCurrentDir,

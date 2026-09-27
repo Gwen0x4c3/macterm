@@ -25,6 +25,7 @@ enum Output {
         if let dump = data.dump { renderDump(dump) }
         if let tutorial = data.tutorial { print(tutorial.text) }
         if let password = data.password { renderPassword(password) }
+        if let widgets = data.widgets { renderWidgets(widgets) }
     }
 
     private static func renderPassword(_ state: ControlPasswordState) {
@@ -32,6 +33,20 @@ enum Output {
         if let prompt = state.prompt { line += " prompt=\(prompt)" }
         if let command = state.command { line += " command=\(command)" }
         print(line)
+    }
+
+    private static func renderWidgets(_ widgets: [ControlWidgetInfo]) {
+        let rows = widgets.map { widget -> [String] in
+            [
+                "widget:\(widget.index)",
+                widget.name ?? "-",
+                widget.size,
+                widget.editing ? "editing" : "locked",
+                widget.session,
+                widget.command ?? "-",
+            ]
+        }
+        printColumns(rows)
     }
 
     private static func renderStatus(_ status: ControlStatusInfo) {
