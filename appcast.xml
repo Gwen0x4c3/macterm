@@ -1213,15 +1213,15 @@
       <enclosure url="https://github.com/thdxg/macterm/releases/download/v1.31.0-beta.1/Macterm-1.31.0-beta.1.dmg" type="application/octet-stream" sparkle:edSignature="KEu0m9icH86fNFfSoE4RRstClOYkR4aIsvxWTaKY1+zengT/b9b2YctK8EFNWqTRymgShBchJnY/xBlLEVLEBg==" length="23828636" />
     </item>
     <item>
-      <title>Macterm 1.30.0-tip.6 (tip)</title>
-      <pubDate>Sun, 27 Sep 2026 22:34:21 +0000</pubDate>
+      <title>Macterm 1.30.0-tip.7 (tip)</title>
+      <pubDate>Mon, 28 Sep 2026 02:30:22 +0000</pubDate>
       <sparkle:channel>tip</sparkle:channel>
-      <sparkle:version>1.30.0.9999.6</sparkle:version>
-      <sparkle:shortVersionString>1.30.0-tip.6</sparkle:shortVersionString>
+      <sparkle:version>1.30.0.9999.7</sparkle:version>
+      <sparkle:shortVersionString>1.30.0-tip.7</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <sparkle:releaseNotesLink>https://macterm.thdxg.dev/notes/tip.html</sparkle:releaseNotesLink>
       <link>https://github.com/thdxg/macterm/releases/tag/tip</link>
-      <enclosure url="https://github.com/thdxg/macterm/releases/download/tip/Macterm-1.30.0-tip.6.dmg" type="application/octet-stream" sparkle:edSignature="hH3DqAEftVFbPaCD7MYGJATNY5NTHPIkLXzGy3UryfKqCEzbU+9xXUs0kdqwstHFC0Iw0y27vFAZPQEO+XahDA==" length="23828357" />
+      <enclosure url="https://github.com/thdxg/macterm/releases/download/tip/Macterm-1.30.0-tip.7.dmg" type="application/octet-stream" sparkle:edSignature="HJdU4pJhBIE2jd4P6VuFRyI9PTTEy9FeJYFzZEYTp4vJOlHr8r4d3A4+kX18M3YKMHNJeEsUmiXPsQQKGQhKDA==" length="23828807" />
     </item>
   </channel>
 </rss>
