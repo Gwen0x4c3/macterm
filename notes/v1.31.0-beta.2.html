@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Macterm 1.31.0-beta.2 release notes</title>
+  <style>
+    body { font: 13px -apple-system, system-ui, sans-serif; color: #1d1d1f; padding: 16px; margin: 0; }
+    @media (prefers-color-scheme: dark) { body { color: #f5f5f7; background: transparent; } a { color: #6cb4ff; } }
+    h1, h2, h3 { margin-top: 0.6em; margin-bottom: 0.3em; }
+    h1 { font-size: 1.3em; } h2 { font-size: 1.15em; } h3 { font-size: 1em; }
+    p, ul, ol { margin: 0.4em 0; }
+    ul, ol { padding-left: 1.4em; }
+    code { background: rgba(127, 127, 127, 0.15); padding: 0 4px; border-radius: 3px; font: 12px ui-monospace, monospace; }
+    pre { background: rgba(127, 127, 127, 0.12); padding: 8px; border-radius: 4px; overflow-x: auto; }
+    pre code { background: transparent; padding: 0; }
+    a { color: #0366d6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<h2>Fixes</h2>
+<ul>
+<li>A remote project's own ssh login now offers to save the password you type and autofills it next time. (#455)</li>
+<li>Options typed to <code class="notranslate">ssh</code> in a pane, such as <code class="notranslate">ssh -p 2222 host</code>, now reach ssh instead of being taken as the host name when ghostty's ssh shell integration is on. (#455)</li>
+<li>The Save Password? bubble names an ssh login by what you typed, without the options Macterm adds to it. (#455)</li>
+<li>Desktop widgets keep their rounded corners when liquid glass is off. (#454)</li>
+<li>Desktop widgets can be placed in every empty spot beside the system's own widgets and line up with them, even while windows cover the desktop. (#451)</li>
+<li><code class="notranslate">macterm pane run clear --session &lt;name&gt;</code> now types <code class="notranslate">clear</code> into that session's pane instead of typing the whole line into the current pane. (#457)</li>
+<li>Settings → Passwords now calls its default Touch ID option "Once per app launch", which is when it asks again. (#458)</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li>New desktop widgets open at 3×3 in the middle of the screen, and the size presets are gone; resize a widget from its edges while editing it. (#454)</li>
+<li><code class="notranslate">macterm pane run</code> now types everything after <code class="notranslate">--</code> exactly as given and refuses any other option it doesn't know, so a script running <code class="notranslate">macterm pane run ls -la</code> must write <code class="notranslate">macterm pane run -- ls -la</code>. (#457)</li>
+</ul>
+<p>Thanks to <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/thdxg/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/thdxg">@thdxg</a> for this release.</p>
+</body>
+</html>
