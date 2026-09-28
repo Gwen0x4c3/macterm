@@ -109,6 +109,39 @@ final class DesktopWidgetPanel: NSPanel {
         widgetContent.onDone = { [weak appState] in appState?.endEditingDesktopWidget() }
     }
 
+    /// The widget's continuous corner, as the shape the window server gives
+    /// this window. A borderless window's shape is otherwise derived from its
+    /// alpha, and coarsely: without glass the CGS background blur filled a
+    /// jagged, wider-cornered region than the rounded tint, so blurred
+    /// desktop showed around every corner and the widget lost its radius
+    /// (glass hides it by drawing its own material inside the curve). AppKit
+    /// asks a window for this image when it builds the window's shape — the
+    /// same hook `NSVisualEffectView.maskImage` uses — so it shapes the blur
+    /// and the shadow alike.
+    @objc(_cornerMask)
+    func cornerMask() -> NSImage? {
+        Self.cornerMaskImage
+    }
+
+    /// A nine-part image: the corners are drawn once and the edges stretch.
+    /// The caps cover the whole continuous curve, which runs past the radius.
+    private static let cornerMaskImage: NSImage = {
+        let radius = DesktopWidgetMetrics.cornerRadius
+        let cap = (radius * 1.6).rounded(.up)
+        let side = cap * 2 + 1
+        let image = NSImage(size: CGSize(width: side, height: side), flipped: false) { rect in
+            let path = RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: rect).cgPath
+            guard let context = NSGraphicsContext.current?.cgContext else { return false }
+            context.setFillColor(NSColor.black.cgColor)
+            context.addPath(path)
+            context.fillPath()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: cap, left: cap, bottom: cap, right: cap)
+        image.resizingMode = .stretch
+        return image
+    }()
+
     /// Keyboard input goes to the widget being edited and nowhere else.
     override var canBecomeKey: Bool { isEditing }
     override var canBecomeMain: Bool { false }
@@ -188,11 +221,12 @@ final class DesktopWidgetPanel: NSPanel {
     // MARK: Menu
 
     /// The system widgets' own right-click menu, as far as it applies: the
-    /// edit toggle, the size families, then removal.
+    /// edit toggle, then removal. No size families — a widget is resized by
+    /// its edges while being edited.
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
-        guard let appState, let widget = appState.desktopWidget(id: widgetID) else { return menu }
+        guard let appState, appState.desktopWidget(id: widgetID) != nil else { return menu }
         if isEditing {
             menu.addItem(item("Done Editing", #selector(finishEditingFromMenu)))
         } else {
@@ -202,13 +236,6 @@ final class DesktopWidgetPanel: NSPanel {
             edit.isEnabled = appState.canEditDesktopWidget(id: widgetID)
             if !edit.isEnabled { edit.toolTip = "Finish editing the other widget first." }
             menu.addItem(edit)
-        }
-        menu.addItem(.separator())
-        for size in DesktopWidgetSize.allCases {
-            let sizeItem = item(size.title, #selector(chooseSize(_:)))
-            sizeItem.representedObject = size.rawValue
-            sizeItem.state = widget.span == size.span ? .on : .off
-            menu.addItem(sizeItem)
         }
         menu.addItem(.separator())
         menu.addItem(item("Remove Widget", #selector(removeWidget)))
@@ -229,12 +256,6 @@ final class DesktopWidgetPanel: NSPanel {
     @objc
     private func finishEditingFromMenu() {
         appState?.endEditingDesktopWidget()
-    }
-
-    @objc
-    private func chooseSize(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let size = DesktopWidgetSize(rawValue: raw) else { return }
-        appState?.setDesktopWidgetSpan(size.span, id: widgetID)
     }
 
     @objc
