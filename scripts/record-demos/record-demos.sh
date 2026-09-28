@@ -1368,8 +1368,7 @@ SH
 # capture as a real key does. Not `pane run`: that pastes, and ssh reads the
 # bracketed-paste markers as part of the password.
 pane_type() {  # pane_type <text> [pane selectors...] — key by key, then Return
-  # (`pane key` takes its selectors anywhere; `pane run` types everything after
-  # its first word, flags included, so its selectors must come first)
+  # (`pane key` takes its selectors anywhere, so they can follow the key)
   local text="$1" i; shift
   for ((i = 0; i < ${#text}; i++)); do
     "$MACTERM" pane key "${text:i:1}" "$@" >/dev/null; sleep 0.06
