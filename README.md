@@ -56,6 +56,10 @@
   A bundled `macterm` command drives the running app, so scripts and AI agents can spawn panes, run commands, and script layouts. `macterm skills` prints skills that teach a coding agent to use it.
 - **Quick terminal** \
   A global drop-down terminal on a hotkey (<kbd>⌃`</kbd>), for scratch work from anywhere.
+- **Desktop widgets** \
+  Put a terminal on your desktop beside the system's own widgets, on the same grid and in the same shape. Its shell keeps running through quits, and the widget comes back where you left it.
+- **Password autofill** \
+  When `ssh`, `sudo`, or any other program asks for a password, Macterm offers to save it to your keychain once it works, then fills it in with Touch ID the next time the same prompt appears.
 - **Adaptive background** \
   The window picks up the background color the running program paints. A full-screen TUI tints the whole window to match; in a split, each pane takes its own.
 - **Ghostty compatibility** \
