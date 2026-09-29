@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Macterm 1.31.0 release notes</title>
+  <style>
+    body { font: 13px -apple-system, system-ui, sans-serif; color: #1d1d1f; padding: 16px; margin: 0; }
+    @media (prefers-color-scheme: dark) { body { color: #f5f5f7; background: transparent; } a { color: #6cb4ff; } }
+    h1, h2, h3 { margin-top: 0.6em; margin-bottom: 0.3em; }
+    h1 { font-size: 1.3em; } h2 { font-size: 1.15em; } h3 { font-size: 1em; }
+    p, ul, ol { margin: 0.4em 0; }
+    ul, ol { padding-left: 1.4em; }
+    code { background: rgba(127, 127, 127, 0.15); padding: 0 4px; border-radius: 3px; font: 12px ui-monospace, monospace; }
+    pre { background: rgba(127, 127, 127, 0.12); padding: 8px; border-radius: 4px; overflow-x: auto; }
+    pre code { background: transparent; padding: 0; }
+    a { color: #0366d6; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<h2>What's New</h2>
+<ul>
+<li><strong>Password manager</strong>: Macterm offers to save passwords you type at terminal prompts and autofills them next time. (#444, #455, #458)</li>
+<li><strong>Desktop widgets</strong>: put terminals on your desktop, alongside the system's widgets. (#445, #451, #454)</li>
+</ul>
+<h2>Fixes</h2>
+<ul>
+<li><code class="notranslate">macos-auto-secure-input</code> now engages at password prompts in every pane. (#444)</li>
+<li><code class="notranslate">ssh -p 2222 host</code> and other ssh options now work in panes with ghostty's ssh integration on. (#455)</li>
+<li>Selecting text at the start of a line no longer pops open the hidden sidebar's overlay. (#448)</li>
+<li><code class="notranslate">macterm pane run</code> no longer types its own flags, such as <code class="notranslate">--session</code>, into the pane instead of using them to pick the target. (#457)</li>
+</ul>
+<h2>Notes</h2>
+<ul>
+<li><code class="notranslate">macterm pane run</code> now types words after <code class="notranslate">--</code> verbatim and refuses any other dash-word before it: write <code class="notranslate">macterm pane run --session X -- ls -la</code> rather than <code class="notranslate">macterm pane run ls -la</code>. Plain words without dashes still work as before.</li>
+</ul>
+<p>Thanks to <a class="user-mention notranslate" data-hovercard-type="user" data-hovercard-url="/users/thdxg/hovercard" data-octo-click="hovercard-link-click" data-octo-dimensions="link_type:self" href="https://github.com/thdxg">@thdxg</a> for this release.</p>
+</body>
+</html>
