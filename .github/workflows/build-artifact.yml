@@ -22,6 +22,12 @@ jobs:
     runs-on: macos-26
     permissions:
       contents: read
+    env:
+      # setup.sh shells out to `gh` (GhosttyKit/zmx release downloads), and gh
+      # inside Actions refuses to run without a token — same env release.yml
+      # and test.yml carry. contents:read is enough: the downloads hit public
+      # repos.
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
