@@ -223,15 +223,22 @@ final class PathCompletionController: NSObject, NSPopoverDelegate {
     // MARK: - Refresh
 
     private func refresh() {
-        guard let view, let context = context?() else {
+        guard let view else {
+            close()
+            return
+        }
+        guard let context = context?() else {
+            logger.debug("popup closed: gate failed (setting off, remote pane, non-shell foreground, or password prompt)")
             close()
             return
         }
         guard let anchor = view.cursorCellRect() else {
+            logger.debug("popup closed: no cursor cell (scrolled away or no surface)")
             close()
             return
         }
         guard let line = view.readCommandLineBeforeCursor() else {
+            logger.debug("popup closed: core declined the viewport read")
             close()
             return
         }
@@ -241,6 +248,9 @@ final class PathCompletionController: NSObject, NSPopoverDelegate {
             workingDirectory: context.workingDirectory
         )
         else {
+            // The normal case — most lines are not path-shaped. Log the line
+            // so a "why didn't it trigger" report has the exact text seen.
+            logger.debug("popup closed: line not completable: \(line, privacy: .public)")
             close()
             return
         }
@@ -273,6 +283,10 @@ final class PathCompletionController: NSObject, NSPopoverDelegate {
         let entries = listing ?? []
         let candidates = PathCompletion.candidates(for: parsed, in: entries)
         guard !candidates.isEmpty else {
+            logger
+                .debug(
+                    "popup closed: no match for \(parsed.typedPrefix, privacy: .public) in \(parsed.baseDirectory, privacy: .public)\(listing == nil ? " (unreadable directory)" : "", privacy: .public)"
+                )
             close()
             return
         }

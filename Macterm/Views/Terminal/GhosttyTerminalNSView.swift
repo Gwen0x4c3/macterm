@@ -2215,23 +2215,21 @@ extension GhosttyTerminalNSView {
         return String(cString: ptr)
     }
 
-    /// The text of the cursor's logical line — prompt included — from the
-    /// line's start up to the cursor: what the path-completion popup parses.
-    /// Read out of the core with a selection whose end is the ACTIVE point
-    /// (the cursor), so soft-wrapped lines arrive whole and the popup sees
-    /// exactly the token being typed. Nil when the core can't serve it.
+    /// The text of the row the cursor sits on — prompt included — as the
+    /// line the path-completion popup parses. Read as the last row of the
+    /// VISIBLE viewport (`readText(scrollback: false)`, the same selection
+    /// `pane dump` uses): while a shell prompt holds the line, the cursor is
+    /// at that row's end, so its text is exactly the input up to the cursor.
+    /// NOT a selection ending at `GHOSTTY_POINT_ACTIVE` — that tag addresses
+    /// the ACTIVE AREA's coordinate space (`.active` + EXACT(0,0) pins its
+    /// top-left, which at a resting viewport equals the viewport top-left),
+    /// so such a selection reads as empty and the popup never opens; the
+    /// cursor itself is not addressable through point tags at all. Known
+    /// edges, both accepted: a right prompt (RPROMPT) is read as part of the
+    /// line, and a line soft-wrapped mid-token parses only the wrapped tail.
+    /// Nil when the core can't serve the read.
     func readCommandLineBeforeCursor() -> String? {
-        guard let surface else { return nil }
-        let sel = ghostty_selection_s(
-            top_left: ghostty_point_s(tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0),
-            bottom_right: ghostty_point_s(tag: GHOSTTY_POINT_ACTIVE, coord: GHOSTTY_POINT_COORD_EXACT, x: 0, y: 0),
-            rectangle: false
-        )
-        var text = ghostty_text_s()
-        guard ghostty_surface_read_text(surface, sel, &text) else { return nil }
-        defer { ghostty_surface_free_text(surface, &text) }
-        guard let ptr = text.text else { return "" }
-        let contents = String(cString: ptr)
+        guard let contents = readText(scrollback: false), !contents.isEmpty else { return nil }
         guard let lastNewline = contents.lastIndex(of: "\n") else { return contents }
         return String(contents[contents.index(after: lastNewline)...])
     }
