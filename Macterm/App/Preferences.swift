@@ -261,6 +261,17 @@ final class Preferences {
         }
     }
 
+    // MARK: - Completion
+
+    /// The cursor-anchored path-completion popup while typing at a shell
+    /// prompt (Settings → General → Completion). Pure Macterm-side UI: no
+    /// ghostty key to force, so no config regeneration on change.
+    var pathCompletionEnabled: Bool {
+        didSet {
+            Keys.pathCompletionEnabled.write(pathCompletionEnabled, to: defaults)
+        }
+    }
+
     // MARK: - Animations (Settings → Animations)
 
     /// Pixel-precise trackpad scrolling through scrollback, on by default.
@@ -850,6 +861,7 @@ final class Preferences {
     private init(defaults: UserDefaults) {
         self.defaults = defaults
         autoTilingEnabled = Keys.autoTiling.read(defaults)
+        pathCompletionEnabled = Keys.pathCompletionEnabled.read(defaults)
         smoothScrolling = Keys.smoothScrolling.read(defaults)
         smoothCursor = Keys.smoothCursor.read(defaults)
         cursorTrail = Keys.cursorTrail.read(defaults)
@@ -1018,6 +1030,7 @@ final class Preferences {
     /// state and one-time migration flags — and stay raw.
     enum Keys {
         static let autoTiling = PreferenceStorageKey("macterm.autoTiling.enabled", default: false)
+        static let pathCompletionEnabled = PreferenceStorageKey("macterm.terminal.pathCompletion", default: true)
         static let smoothScrolling = PreferenceStorageKey("macterm.terminal.smoothScrolling", default: true)
         static let smoothCursor = PreferenceStorageKey("macterm.terminal.smoothCursor", default: false)
         static let cursorTrail = PreferenceStorageKey("macterm.terminal.cursorTrail", default: false)

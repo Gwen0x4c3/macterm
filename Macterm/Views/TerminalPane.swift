@@ -289,6 +289,22 @@ private struct TerminalSurface: NSViewRepresentable {
             guard let pane else { return false }
             return KeybindPassthrough.yields(event: event, pane: pane)
         }
+        // Path-completion popup preconditions, re-read on every popup
+        // refresh: the setting, a LOCAL pane whose line a shell owns (shell
+        // integration's prompt verdict, or — shells without OSC 133, like
+        // bash 3.2 — a shell holding the foreground), and no password prompt
+        // up on this pane.
+        view.pathCompletionContext = { [weak pane, weak view] in
+            guard let pane, let view else { return nil }
+            guard Preferences.shared.pathCompletionEnabled else { return nil }
+            guard !pane.isRemote else { return nil }
+            guard !view.passwordInput, !view.detectedPasswordInput else { return nil }
+            guard pane.isShellAtPrompt || ProcessInspector.foregroundProcessIsShell(forPane: pane) else { return nil }
+            return PathCompletionContext(
+                homeDirectory: NSHomeDirectory(),
+                workingDirectory: pane.liveLocalWorkingDirectory() ?? pane.projectPath
+            )
+        }
         view.onProcessExit = onProcessExit
         view.onSplitRequest = onSplitRequest
         view.onZoomRequest = onZoomRequest
@@ -313,7 +329,9 @@ private struct TerminalSurface: NSViewRepresentable {
                 FocusRestoration.restoreFocus(to: pane.id, finder: { [weak pane] in pane }, in: view.window)
                 return
             }
-            if let needle, !needle.isEmpty { pane.searchState.needle = needle }
+            if let needle, !needle.isEmpty {
+                pane.searchState.needle = needle
+            }
             pane.searchState.isVisible = true
             pane.searchState.startPublishing { [weak pane, weak view] q in
                 view?.sendSearchQuery(q)
@@ -321,7 +339,9 @@ private struct TerminalSurface: NSViewRepresentable {
                 // searched, not the live (possibly newer) field text.
                 pane?.scrollView?.noteSearchNeedle(q)
             }
-            if !pane.searchState.needle.isEmpty { pane.searchState.pushNeedle() }
+            if !pane.searchState.needle.isEmpty {
+                pane.searchState.pushNeedle()
+            }
         }
         view.onSearchEnd = { [weak pane] in
             guard let pane else { return }

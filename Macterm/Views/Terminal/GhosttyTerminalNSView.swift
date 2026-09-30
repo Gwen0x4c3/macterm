@@ -221,6 +221,10 @@ final class GhosttyTerminalNSView: NSView {
 
     func surfaceDidRender() {
         onTerminalRender?()
+        // The catch-up trigger for the completion popup: text that landed
+        // after a debounced refresh read (a commit's own typed text included)
+        // reaches the core before the next frame does.
+        pathCompletion.noteRender()
     }
 
     /// The most recent OSC 11 background reported by this surface. It is
@@ -325,22 +329,34 @@ final class GhosttyTerminalNSView: NSView {
         case GHOSTTY_MOUSE_SHAPE_CROSSHAIR: return .crosshair
         case GHOSTTY_MOUSE_SHAPE_NOT_ALLOWED: return .operationNotAllowed
         case GHOSTTY_MOUSE_SHAPE_W_RESIZE:
-            if #available(macOS 15.0, *) { return .columnResize(directions: .left) }
+            if #available(macOS 15.0, *) {
+                return .columnResize(directions: .left)
+            }
             return .resizeLeft
         case GHOSTTY_MOUSE_SHAPE_E_RESIZE:
-            if #available(macOS 15.0, *) { return .columnResize(directions: .right) }
+            if #available(macOS 15.0, *) {
+                return .columnResize(directions: .right)
+            }
             return .resizeRight
         case GHOSTTY_MOUSE_SHAPE_N_RESIZE:
-            if #available(macOS 15.0, *) { return .rowResize(directions: .up) }
+            if #available(macOS 15.0, *) {
+                return .rowResize(directions: .up)
+            }
             return .resizeUp
         case GHOSTTY_MOUSE_SHAPE_S_RESIZE:
-            if #available(macOS 15.0, *) { return .rowResize(directions: .down) }
+            if #available(macOS 15.0, *) {
+                return .rowResize(directions: .down)
+            }
             return .resizeDown
         case GHOSTTY_MOUSE_SHAPE_NS_RESIZE:
-            if #available(macOS 15.0, *) { return .rowResize }
+            if #available(macOS 15.0, *) {
+                return .rowResize
+            }
             return .resizeUpDown
         case GHOSTTY_MOUSE_SHAPE_EW_RESIZE:
-            if #available(macOS 15.0, *) { return .columnResize }
+            if #available(macOS 15.0, *) {
+                return .columnResize
+            }
             return .resizeLeftRight
         default:
             return nil
@@ -359,6 +375,7 @@ final class GhosttyTerminalNSView: NSView {
     func surfaceDidPasteText(_ text: String) {
         PasswordPromptMonitor.shared.viewDidPaste(self, text: text)
         recordCommandInput(text)
+        pathCompletion.noteInputChanged()
         if TerminalCommandSubmission.textContainsNewline(text),
            TerminalCommandSubmission.textContainsContent(text)
         {
@@ -396,6 +413,16 @@ final class GhosttyTerminalNSView: NSView {
     /// pane's program runs behind the daemon's pty, not this view's, and this
     /// view has no back-reference to its pane. See `KeybindPassthrough`.
     var yieldsToProgram: ((NSEvent) -> Bool)?
+    /// Path-completion popup wiring: the pane-side preconditions (setting on,
+    /// local pane, a shell owns the line, no password prompt) and the
+    /// directories bare tokens resolve against. Injected like
+    /// `yieldsToProgram` because this view has no back-reference to its pane;
+    /// re-read on every popup refresh.
+    var pathCompletionContext: (() -> PathCompletionContext?)?
+    /// The cursor-anchored completion popup for this surface. Lazily created:
+    /// it anchors to this view's cursor cell and drives nothing until a
+    /// keystroke or paste schedules a refresh.
+    private lazy var pathCompletion = PathCompletionController(view: self)
     var onProcessExit: (() -> Void)?
     var onSplitRequest: ((SplitDirection, SplitPosition) -> Void)?
     var onZoomRequest: (() -> Void)?
@@ -808,7 +835,9 @@ final class GhosttyTerminalNSView: NSView {
         // the surface goes, so a reattached surface starts uncomposed rather
         // than inheriting a preedit that can never be resolved.
         discardMarkedText()
-        if let surface { ghostty_surface_free(surface) }
+        if let surface {
+            ghostty_surface_free(surface)
+        }
         surface = nil
         accessibilityScreenContentsCache = nil
         configCStrings.forEach { free($0) }
@@ -839,7 +868,9 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     deinit {
-        if let surface { ghostty_surface_free(surface) }
+        if let surface {
+            ghostty_surface_free(surface)
+        }
         configCStrings.forEach { free($0) }
         for token in windowObservers {
             NotificationCenter.default.removeObserver(token)
@@ -861,6 +892,7 @@ final class GhosttyTerminalNSView: NSView {
             // re-attaching). Mark occluded so the renderer doesn't draw to an
             // off-screen layer.
             syncOcclusion()
+            pathCompletion.close()
             return
         }
         if surface == nil {
@@ -909,7 +941,9 @@ final class GhosttyTerminalNSView: NSView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        if pendingSurfaceCreation { createSurface() }
+        if pendingSurfaceCreation {
+            createSurface()
+        }
         updateMetalLayerSize()
     }
 
@@ -997,15 +1031,21 @@ final class GhosttyTerminalNSView: NSView {
         // (TabIndexChord), which the monitor has already handled; on its own
         // it belongs to ghostty as reset-font-size.
         let key = (event.charactersIgnoringModifiers ?? "").lowercased()
-        if flags == .command, let n = Int(key), (1 ... 9).contains(n) { return true }
+        if flags == .command, let n = Int(key), (1 ... 9).contains(n) {
+            return true
+        }
         // A binding the user flagged for passthrough is NOT an app shortcut
         // while a program owns this pane's keyboard — otherwise the key would
         // die here even though the responder deliberately let it fall through.
         // The two paths must agree; they read the same policy microseconds
         // apart, off the same live tty state.
-        if yieldsToProgram?(event) == true { return false }
+        if yieldsToProgram?(event) == true {
+            return false
+        }
         // Check all configurable hotkey actions
-        if HotkeyAction.allCases.contains(where: { HotkeyRegistry.matches(event, action: $0) }) { return true }
+        if HotkeyAction.allCases.contains(where: { HotkeyRegistry.matches(event, action: $0) }) {
+            return true
+        }
         return false
     }
 
@@ -1046,7 +1086,9 @@ final class GhosttyTerminalNSView: NSView {
             ghostty_surface_set_focus(surface, true)
             onFocus?()
         }
-        if result { syncSecureInputFocus(true) }
+        if result {
+            syncSecureInputFocus(true)
+        }
         return result
     }
 
@@ -1057,8 +1099,15 @@ final class GhosttyTerminalNSView: NSView {
         // `_markedRange` and kill plain-key input in this pane for good.
         discardMarkedText()
         let result = super.resignFirstResponder()
-        if result, let surface { ghostty_surface_set_focus(surface, false) }
-        if result { syncSecureInputFocus(false) }
+        if result, let surface {
+            ghostty_surface_set_focus(surface, false)
+        }
+        if result {
+            syncSecureInputFocus(false)
+        }
+        if result {
+            pathCompletion.viewDidLoseFocus()
+        }
         return result
     }
 
@@ -1075,7 +1124,9 @@ final class GhosttyTerminalNSView: NSView {
     private var currentTrackingArea: NSTrackingArea?
 
     private func setupTrackingArea() {
-        if let existing = currentTrackingArea { removeTrackingArea(existing) }
+        if let existing = currentTrackingArea {
+            removeTrackingArea(existing)
+        }
         let area = NSTrackingArea(
             rect: bounds,
             options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect],
@@ -1143,14 +1194,24 @@ final class GhosttyTerminalNSView: NSView {
         // never reaches libghostty. Everything else is reported to the
         // password monitor at the point it is actually sent, below, as the
         // text the tty will receive — not `event.characters`.
-        if PasswordPromptMonitor.shared.viewWillSendKey(self, event: event) { return }
+        if PasswordPromptMonitor.shared.viewWillSendKey(self, event: event) {
+            return
+        }
+        // While the path-completion popup is open it owns ↑/↓/Tab/Return/
+        // Escape on this same key path (see `PathCompletionController`); a
+        // consumed key never reaches libghostty.
+        if pathCompletion.handleKeyDown(event) {
+            return
+        }
         let action: ghostty_input_action_e = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         // What zmx will count as user input: a key that reaches the pty. Cmd
         // chords are either app shortcuts or encode to nothing, so they are
         // left out; everything else is close enough to the daemon's own
         // `isUserInput` rule for the leadership record it feeds (#345).
-        if !flags.contains(.command), !isAppShortcut(event) { onUserInput?() }
+        if !flags.contains(.command), !isAppShortcut(event) {
+            onUserInput?()
+        }
         if TerminalCommandSubmission.clearsInputEvidence(
             keyCode: event.keyCode,
             hasControl: flags.contains(.control),
@@ -1160,7 +1221,9 @@ final class GhosttyTerminalNSView: NSView {
         }
 
         if flags.contains(.control), !flags.contains(.command), !flags.contains(.option), !hasMarkedText() {
-            if isAppShortcut(event) { return }
+            if isAppShortcut(event) {
+                return
+            }
             // Swallow *unshifted* Ctrl-\ (the tty VQUIT char, 0x1C → SIGQUIT).
             // It's trivially easy to hit by accident and kills the pane's
             // foreground process with a core dump; forwarding it to ghostty is
@@ -1170,7 +1233,9 @@ final class GhosttyTerminalNSView: NSView {
             // Ctrl-Shift-\, so guarding the shifted chord would eat a harmless
             // keystroke — leave it alone. SIGQUIT stays reachable via `kill
             // -QUIT` for the rare intentional case.
-            if event.keyCode == 42, !flags.contains(.shift) { return }
+            if event.keyCode == 42, !flags.contains(.shift) {
+                return
+            }
             // Past the swallow and the shortcut check: this chord reaches
             // the tty, so the password capture sees it.
             if let input = PasswordKeyInput.from(event) {
@@ -1186,11 +1251,15 @@ final class GhosttyTerminalNSView: NSView {
                     _ = ghostty_surface_key(surface, ke)
                 }
             }
+            // A control chord can edit the line (^U, ^W, ^A…); re-read it.
+            pathCompletion.noteInputChanged()
             return
         }
 
         if flags.contains(.command) {
-            if isAppShortcut(event) { return }
+            if isAppShortcut(event) {
+                return
+            }
             var ke = buildKeyEvent(from: event, action: action)
             ke.text = nil
             _ = ghostty_surface_key(surface, ke)
@@ -1276,6 +1345,9 @@ final class GhosttyTerminalNSView: NSView {
             }
             PasswordPromptMonitor.shared.viewDidType(self, input: typed)
         }
+        // The text just forwarded may have edited the input line — the
+        // completion popup re-parses it (debounced).
+        pathCompletion.noteInputChanged()
 
         let userModifiers: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
         if forwarded,
@@ -1312,7 +1384,9 @@ final class GhosttyTerminalNSView: NSView {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if isAppShortcut(event) { return false }
+        if isAppShortcut(event) {
+            return false
+        }
         // Confirm this view owns keyboard focus BEFORE firing the interaction
         // side effect: AppKit offers key equivalents to the whole hierarchy, so
         // every visible pane in a split receives this. Running `onInteraction`
@@ -1359,6 +1433,7 @@ final class GhosttyTerminalNSView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         onInteraction?()
+        pathCompletion.noteMouse()
         guard let surface else { return }
         window?.makeFirstResponder(self)
         ghostty_surface_set_focus(surface, true)
@@ -1529,7 +1604,9 @@ final class GhosttyTerminalNSView: NSView {
 
     private func scrollMods(for event: NSEvent) -> ghostty_input_scroll_mods_t {
         var scrollMods: ghostty_input_scroll_mods_t = 0
-        if event.hasPreciseScrollingDeltas { scrollMods |= 1 }
+        if event.hasPreciseScrollingDeltas {
+            scrollMods |= 1
+        }
         scrollMods |= scrollMomentum(for: event.momentumPhase) << 1
         return scrollMods
     }
@@ -1684,20 +1761,36 @@ final class GhosttyTerminalNSView: NSView {
         // ctrl/command never contribute to text translation; assume everything
         // else did. Matches Ghostty's own app behavior.
         var m = GHOSTTY_MODS_NONE.rawValue
-        if flags.contains(.shift) { m |= GHOSTTY_MODS_SHIFT.rawValue }
-        if flags.contains(.option) { m |= GHOSTTY_MODS_ALT.rawValue }
-        if flags.contains(.capsLock) { m |= GHOSTTY_MODS_CAPS.rawValue }
+        if flags.contains(.shift) {
+            m |= GHOSTTY_MODS_SHIFT.rawValue
+        }
+        if flags.contains(.option) {
+            m |= GHOSTTY_MODS_ALT.rawValue
+        }
+        if flags.contains(.capsLock) {
+            m |= GHOSTTY_MODS_CAPS.rawValue
+        }
         return ghostty_input_mods_e(rawValue: m)
     }
 
     private func mods(_ event: NSEvent) -> ghostty_input_mods_e {
         var m = GHOSTTY_MODS_NONE.rawValue
         let f = event.modifierFlags
-        if f.contains(.shift) { m |= GHOSTTY_MODS_SHIFT.rawValue }
-        if f.contains(.control) { m |= GHOSTTY_MODS_CTRL.rawValue }
-        if f.contains(.option) { m |= GHOSTTY_MODS_ALT.rawValue }
-        if f.contains(.command) { m |= GHOSTTY_MODS_SUPER.rawValue }
-        if f.contains(.capsLock) { m |= GHOSTTY_MODS_CAPS.rawValue }
+        if f.contains(.shift) {
+            m |= GHOSTTY_MODS_SHIFT.rawValue
+        }
+        if f.contains(.control) {
+            m |= GHOSTTY_MODS_CTRL.rawValue
+        }
+        if f.contains(.option) {
+            m |= GHOSTTY_MODS_ALT.rawValue
+        }
+        if f.contains(.command) {
+            m |= GHOSTTY_MODS_SUPER.rawValue
+        }
+        if f.contains(.capsLock) {
+            m |= GHOSTTY_MODS_CAPS.rawValue
+        }
         // Side bits: NSEvent's modifierFlags include device-dependent bits
         // (NX_DEVICE{L,R}*KEYMASK) that tell us which physical modifier key was
         // pressed. libghostty needs the side bit to honor macos-option-as-alt =
@@ -1710,10 +1803,18 @@ final class GhosttyTerminalNSView: NSView {
         let leftCtrl: UInt = 0x01, rightCtrl: UInt = 0x2000
         let leftAlt: UInt = 0x20, rightAlt: UInt = 0x40
         let leftCmd: UInt = 0x08, rightCmd: UInt = 0x10
-        if raw & rightShift != 0, raw & leftShift == 0 { m |= GHOSTTY_MODS_SHIFT_RIGHT.rawValue }
-        if raw & rightCtrl != 0, raw & leftCtrl == 0 { m |= GHOSTTY_MODS_CTRL_RIGHT.rawValue }
-        if raw & rightAlt != 0, raw & leftAlt == 0 { m |= GHOSTTY_MODS_ALT_RIGHT.rawValue }
-        if raw & rightCmd != 0, raw & leftCmd == 0 { m |= GHOSTTY_MODS_SUPER_RIGHT.rawValue }
+        if raw & rightShift != 0, raw & leftShift == 0 {
+            m |= GHOSTTY_MODS_SHIFT_RIGHT.rawValue
+        }
+        if raw & rightCtrl != 0, raw & leftCtrl == 0 {
+            m |= GHOSTTY_MODS_CTRL_RIGHT.rawValue
+        }
+        if raw & rightAlt != 0, raw & leftAlt == 0 {
+            m |= GHOSTTY_MODS_ALT_RIGHT.rawValue
+        }
+        if raw & rightCmd != 0, raw & leftCmd == 0 {
+            m |= GHOSTTY_MODS_SUPER_RIGHT.rawValue
+        }
         return ghostty_input_mods_e(rawValue: m)
     }
 
@@ -1736,7 +1837,9 @@ final class GhosttyTerminalNSView: NSView {
     private func filterSpecial(_ text: String) -> String {
         guard let scalar = text.unicodeScalars.first else { return "" }
         let v = scalar.value
-        if v < 0x20 || (0xF700 ... 0xF8FF).contains(v) { return "" }
+        if v < 0x20 || (0xF700 ... 0xF8FF).contains(v) {
+            return ""
+        }
         return text
     }
 
@@ -1756,9 +1859,15 @@ final class GhosttyTerminalNSView: NSView {
             (GHOSTTY_MODS_ALT.rawValue, NSEvent.ModifierFlags.option),
             (GHOSTTY_MODS_SUPER.rawValue, NSEvent.ModifierFlags.command),
         ] {
-            if translationModsRaw & bit != 0 { translationFlags.insert(flag) } else { translationFlags.remove(flag) }
+            if translationModsRaw & bit != 0 {
+                translationFlags.insert(flag)
+            } else {
+                translationFlags.remove(flag)
+            }
         }
-        if translationFlags == event.modifierFlags { return event }
+        if translationFlags == event.modifierFlags {
+            return event
+        }
         let translatedChars = event.characters(byApplyingModifiers: translationFlags) ?? ""
         return NSEvent.keyEvent(
             with: event.type,
@@ -1848,7 +1957,9 @@ extension GhosttyTerminalNSView {
         if TerminalCommandSubmission.textContainsNewline(text) {
             let hasContent = consumeCommandSubmissionEvidence()
             onCommandSubmitted?(hasContent)
-            if hasContent { preserveProgrammaticCommandInput(text) }
+            if hasContent {
+                preserveProgrammaticCommandInput(text)
+            }
         }
         return true
     }
@@ -1915,10 +2026,18 @@ extension GhosttyTerminalNSView {
             clearCommandSubmissionEvidence()
         }
         var m = GHOSTTY_MODS_NONE.rawValue
-        if flags.contains(.shift) { m |= GHOSTTY_MODS_SHIFT.rawValue }
-        if flags.contains(.control) { m |= GHOSTTY_MODS_CTRL.rawValue }
-        if flags.contains(.option) { m |= GHOSTTY_MODS_ALT.rawValue }
-        if flags.contains(.command) { m |= GHOSTTY_MODS_SUPER.rawValue }
+        if flags.contains(.shift) {
+            m |= GHOSTTY_MODS_SHIFT.rawValue
+        }
+        if flags.contains(.control) {
+            m |= GHOSTTY_MODS_CTRL.rawValue
+        }
+        if flags.contains(.option) {
+            m |= GHOSTTY_MODS_ALT.rawValue
+        }
+        if flags.contains(.command) {
+            m |= GHOSTTY_MODS_SUPER.rawValue
+        }
         let mods = ghostty_input_mods_e(rawValue: m)
         // The unshifted codepoint lets libghostty compute the control byte for
         // letter chords (`ctrl+c` → keycode 8, unshifted 0x63 → 0x03). Named /
@@ -1961,7 +2080,9 @@ extension GhosttyTerminalNSView {
         // Typed characters are the evidence a following `pane key return` reads
         // to tell a real submission from a bare Return (the AI-agent activity
         // heuristic), exactly as `keyDown` records its literal text.
-        if let text { recordCommandInput(text) }
+        if let text {
+            recordCommandInput(text)
+        }
         let userModifiers: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
         if TerminalCommandSubmission.isReturn(
             keyCode: keyCode,
@@ -2094,6 +2215,46 @@ extension GhosttyTerminalNSView {
         return String(cString: ptr)
     }
 
+    /// The text of the cursor's logical line — prompt included — from the
+    /// line's start up to the cursor: what the path-completion popup parses.
+    /// Read out of the core with a selection whose end is the ACTIVE point
+    /// (the cursor), so soft-wrapped lines arrive whole and the popup sees
+    /// exactly the token being typed. Nil when the core can't serve it.
+    func readCommandLineBeforeCursor() -> String? {
+        guard let surface else { return nil }
+        let sel = ghostty_selection_s(
+            top_left: ghostty_point_s(tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0),
+            bottom_right: ghostty_point_s(tag: GHOSTTY_POINT_ACTIVE, coord: GHOSTTY_POINT_COORD_EXACT, x: 0, y: 0),
+            rectangle: false
+        )
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_text(surface, sel, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let ptr = text.text else { return "" }
+        let contents = String(cString: ptr)
+        guard let lastNewline = contents.lastIndex(of: "\n") else { return contents }
+        return String(contents[contents.index(after: lastNewline)...])
+    }
+
+    /// Type a committed completion: `eraseCount` backspaces through the key-
+    /// encoding path, then `text` as plain key text — the same primitive
+    /// `sendSecret` uses, deliberately NOT the paste path `sendText` takes and
+    /// never a password capture. Driven only by the completion popup; the
+    /// `onUserInput` ping matches what typing the same characters by hand
+    /// reports (zmx leadership).
+    func commitPathCompletion(eraseCount: Int, text: String) {
+        guard let surface, !text.isEmpty else { return }
+        onInteraction?()
+        for _ in 0 ..< max(0, eraseCount) {
+            sendKey(keyCode: 51, mods: []) // kVK_Delete — backspace at the shell
+        }
+        text.withCString { ptr in
+            _ = ghostty_surface_key(surface, Self.textOnlyKeyEvent(ptr))
+        }
+        recordCommandInput(text)
+        onUserInput?()
+    }
+
     #if DEBUG
     /// DEBUG-ONLY: drive `ghostty_surface_set_size` once, directly, bypassing
     /// SwiftUI layout — so a resize/reflow transition can be reproduced in
@@ -2123,7 +2284,9 @@ extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {
         // is how some input sources signal "abandon what you were composing".
         // Clearing before the empty-text bail keeps `hasMarkedText` honest.
         _markedRange = NSRange(location: NSNotFound, length: 0)
-        if let surface { ghostty_surface_preedit(surface, nil, 0) }
+        if let surface {
+            ghostty_surface_preedit(surface, nil, 0)
+        }
         guard !text.isEmpty else { return }
         if currentKeyEvent != nil {
             keyTextAccumulator.append(text)
@@ -2135,6 +2298,7 @@ extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {
                 _ = ghostty_surface_key(surface, ke)
             }
             recordCommandInput(text)
+            pathCompletion.noteInputChanged()
         }
     }
 
@@ -2154,7 +2318,9 @@ extension GhosttyTerminalNSView: @preconcurrency NSTextInputClient {
 
     func unmarkText() {
         _markedRange = NSRange(location: NSNotFound, length: 0)
-        if let surface { ghostty_surface_preedit(surface, nil, 0) }
+        if let surface {
+            ghostty_surface_preedit(surface, nil, 0)
+        }
     }
 
     func selectedRange() -> NSRange {

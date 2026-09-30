@@ -234,7 +234,9 @@ private struct PinnedSidebar: NSViewRepresentable {
             // controller can collapse the column from its own state even with
             // `canCollapse` false, so this is the backstop — reached from the
             // divider-drag notification, which is when it actually happens.
-            if sidebar.isCollapsed { sidebar.isCollapsed = false }
+            if sidebar.isCollapsed {
+                sidebar.isCollapsed = false
+            }
             // And restore the width if the drag left it anywhere else.
             let current = sidebar.viewController.view.frame.width
             if abs(current - width) > 0.5 {
@@ -257,7 +259,9 @@ private struct PinnedSidebar: NSViewRepresentable {
                 self.shield = view
                 return view
             }()
-            if shield.superview !== host { host.addSubview(shield) }
+            if shield.superview !== host {
+                host.addSubview(shield)
+            }
             // Cover the divider plus a hair on each side: AppKit's drag region
             // is slightly wider than the drawn hairline.
             let padding: CGFloat = 3
@@ -500,9 +504,15 @@ private struct HostWindowReader: NSViewRepresentable {
 /// anything in between shows the percent. Stepped slider values accumulate
 /// floating-point error, hence the tolerance.
 private func anchorName(_ value: Double, zero: String, one: String) -> String {
-    if abs(value) < 0.001 { return zero }
-    if abs(value - 1) < 0.001 { return one }
-    if abs(value - 0.5) < 0.001 { return "Center" }
+    if abs(value) < 0.001 {
+        return zero
+    }
+    if abs(value - 1) < 0.001 {
+        return one
+    }
+    if abs(value - 0.5) < 0.001 {
+        return "Center"
+    }
     return "\(Int((value * 100).rounded()))%"
 }
 
@@ -516,6 +526,7 @@ private struct GeneralSettings: View {
     @State private var autoTilingEnabled: Bool = Preferences.shared.autoTilingEnabled
     @State private var backgroundSSHConnections: Bool = Preferences.shared.backgroundSSHConnections
     @State private var reconnectRemotePanes: Bool = Preferences.shared.reconnectRemotePanes
+    @State private var pathCompletionEnabled: Bool = Preferences.shared.pathCompletionEnabled
 
     /// Why session persistence is inactive, when it is. Missing binary is a
     /// dev-build state; an over-budget socket path is an environment problem
@@ -621,6 +632,20 @@ private struct GeneralSettings: View {
                     }
                 Text("Distributes pane sizes evenly on split and close.")
                     .settingsCaption()
+            }
+
+            Section("Completion") {
+                Toggle("Suggest file paths while typing", isOn: $pathCompletionEnabled)
+                    .onChange(of: pathCompletionEnabled) { _, v in
+                        Preferences.shared.pathCompletionEnabled = v
+                    }
+                Text(
+                    "While a shell prompt is showing, typing a path offers the "
+                        + "matching files and folders in a picker at the cursor. "
+                        + "↑↓ choose, Tab or Return insert, Esc dismiss. Local "
+                        + "panes only."
+                )
+                .settingsCaption()
             }
 
             Section("Remote Projects") {
@@ -1618,7 +1643,9 @@ private struct KeymapSettings: View {
         var grouped: [AppCommand.Category: [HotkeyAction]] = [:]
         for action in HotkeyAction.allCases {
             let category = action.appCommand.category
-            if grouped[category] == nil { order.append(category) }
+            if grouped[category] == nil {
+                order.append(category)
+            }
             grouped[category, default: []].append(action)
         }
         return order.map { ($0, grouped[$0] ?? []) }
@@ -1870,7 +1897,9 @@ private struct HotkeyCaptureView: NSViewRepresentable {
         }
 
         func tearDown() {
-            if let monitor { NSEvent.removeMonitor(monitor) }
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+            }
             monitor = nil
         }
     }
